@@ -1,0 +1,23 @@
+[Unit]
+Description=CyberStore Next.js Service
+After=network.target mariadb.service mysql.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=cyberstore
+Group=cyberstore
+WorkingDirectory=/opt/cyberstore
+Environment=NODE_ENV=production
+Environment=PORT=3000
+EnvironmentFile=/opt/cyberstore/.env
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

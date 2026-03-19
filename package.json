@@ -1,0 +1,44 @@
+{
+  "name": "cyberstore",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:seed": "prisma db seed"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.6.0",
+    "bcryptjs": "^2.4.3",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.511.0",
+    "next": "^14.2.5",
+    "next-auth": "^4.24.7",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "swr": "^2.3.3",
+    "tailwind-merge": "^3.2.0",
+    "zod": "^3.24.1"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.mjs"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.16.5",
+    "@types/react": "^18.3.8",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.5",
+    "postcss": "^8.4.47",
+    "prisma": "^6.6.0",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.5.4"
+  }
+}

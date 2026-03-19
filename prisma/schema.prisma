@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum StockStatus {
+  READY
+  DELIVERED
+  EXPIRED
+}
+
+enum TransactionStatus {
+  PENDING
+  PAID
+  EXPIRED
+}
+
+model User {
+  id            Int           @id @default(autoincrement())
+  email         String        @unique
+  password_hash String
+  role          UserRole      @default(USER)
+  is_verified   Boolean       @default(false)
+
+  ownedStock    StockItem[]
+  transactions  Transaction[]
+}
+
+model Product {
+  id           Int           @id @default(autoincrement())
+  title        String
+  description  String        @db.Text
+  base_price   Int
+  is_active    Boolean       @default(true)
+
+  stockItems   StockItem[]
+  transactions Transaction[]
+}
+
+model StockItem {
+  id         Int         @id @default(autoincrement())
+  product_id Int
+  content    String      @db.Text
+  status     StockStatus @default(READY)
+  owner_id   Int?
+
+  product    Product     @relation(fields: [product_id], references: [id])
+  owner      User?       @relation(fields: [owner_id], references: [id])
+
+  transaction Transaction?
+
+  @@index([product_id])
+  @@index([owner_id])
+  @@index([status])
+}
+
+model Transaction {
+  id          Int               @id @default(autoincrement())
+  user_id     Int
+  product_id  Int
+  stock_id    Int?              @unique
+  base_price  Int
+  unique_code Int
+  total_price Int
+  status      TransactionStatus @default(PENDING)
+  expires_at  DateTime
+  created_at  DateTime          @default(now())
+
+  user        User              @relation(fields: [user_id], references: [id])
+  product     Product           @relation(fields: [product_id], references: [id])
+  stock       StockItem?        @relation(fields: [stock_id], references: [id])
+
+  @@index([user_id])
+  @@index([product_id])
+  @@index([status])
+  @@index([total_price])
+}
+
+model EmailOtp {
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  otp_hash      String
+  expires_at    DateTime
+  attempt_count Int      @default(0)
+  created_at    DateTime @default(now())
+
+  @@index([expires_at])
+}
