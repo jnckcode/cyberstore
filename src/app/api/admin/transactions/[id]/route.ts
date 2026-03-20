@@ -28,9 +28,21 @@ export async function PATCH(request: Request, context: { params: { id: string } 
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
+  const existing = await prisma.transaction.findUnique({
+    where: { id: parsedParams.data.id },
+    select: { id: true, total_price: true }
+  });
+
+  if (!existing) {
+    return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
+  }
+
   const transaction = await prisma.transaction.update({
     where: { id: parsedParams.data.id },
-    data: { status: parsedPayload.data.status }
+    data: {
+      status: parsedPayload.data.status,
+      active_nominal: parsedPayload.data.status === "PENDING" ? existing.total_price : null
+    }
   });
 
   await writeAdminAuditLog({

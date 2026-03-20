@@ -44,7 +44,7 @@ export async function GET(_request: Request, context: { params: { id: string } }
   if (transaction.status === "PENDING" && transaction.expires_at <= new Date()) {
     await prisma.transaction.update({
       where: { id: transaction.id },
-      data: { status: "EXPIRED" }
+      data: { status: "EXPIRED", active_nominal: null }
     });
 
     return NextResponse.json(

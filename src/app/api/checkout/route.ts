@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { authOptions } from "@/lib/auth";
@@ -65,46 +66,81 @@ export async function POST(request: Request) {
       }
     },
     data: {
-      status: "EXPIRED"
+      status: "EXPIRED",
+      active_nominal: null
     }
   });
 
-  const pendingWithSameBase = await prisma.transaction.findMany({
-    where: {
-      status: "PENDING",
-      base_price: product.base_price,
-      expires_at: {
-        gt: new Date()
+  let transaction:
+    | {
+        id: number;
+        status: string;
+        total_price: number;
+        expires_at: Date;
       }
-    },
-    select: {
-      total_price: true
+    | null = null;
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const pendingWithSameBase = await prisma.transaction.findMany({
+      where: {
+        status: "PENDING",
+        base_price: product.base_price,
+        expires_at: {
+          gt: new Date()
+        }
+      },
+      select: {
+        total_price: true
+      }
+    });
+
+    const usedNominals = new Set(pendingWithSameBase.map((item) => item.total_price));
+    const uniqueCode = pickUniqueCode(usedNominals, product.base_price);
+
+    if (uniqueCode === null) {
+      return NextResponse.json(
+        { error: "No available unique code for pending transactions" },
+        { status: 409 }
+      );
     }
-  });
 
-  const usedNominals = new Set(pendingWithSameBase.map((item) => item.total_price));
-  const uniqueCode = pickUniqueCode(usedNominals, product.base_price);
+    const totalPrice = product.base_price + uniqueCode;
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-  if (uniqueCode === null) {
-    return NextResponse.json(
-      { error: "No available unique code for pending transactions" },
-      { status: 409 }
-    );
+    try {
+      const created = await prisma.transaction.create({
+        data: {
+          user_id: Number(session.user.id),
+          product_id: product.id,
+          base_price: product.base_price,
+          unique_code: uniqueCode,
+          total_price: totalPrice,
+          active_nominal: totalPrice,
+          status: "PENDING",
+          expires_at: expiresAt
+        },
+        select: {
+          id: true,
+          status: true,
+          total_price: true,
+          expires_at: true
+        }
+      });
+
+      transaction = created;
+      break;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        continue;
+      }
+
+      throw error;
+    }
   }
 
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-
-  const transaction = await prisma.transaction.create({
-    data: {
-      user_id: Number(session.user.id),
-      product_id: product.id,
-      base_price: product.base_price,
-      unique_code: uniqueCode,
-      total_price: product.base_price + uniqueCode,
-      status: "PENDING",
-      expires_at: expiresAt
-    }
-  });
+  if (!transaction) {
+    return NextResponse.json({ error: "Failed to allocate unique nominal, please retry" }, { status: 409 });
+  }
 
   return NextResponse.json(
     {

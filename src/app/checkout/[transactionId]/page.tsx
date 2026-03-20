@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 
 import { PaymentStatusPoller } from "@/components/payment-status-poller";
-import { CopySecretButton } from "@/components/copy-secret-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -70,16 +69,6 @@ export default async function CheckoutQrisPage({
               </p>
             )}
           </div>
-
-          {dynamicQrisString ? (
-            <div className="rounded-lg border border-border p-3">
-              <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Dynamic QRIS Payload</p>
-              <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-all text-xs">{dynamicQrisString}</pre>
-              <div className="mt-2">
-                <CopySecretButton value={dynamicQrisString} />
-              </div>
-            </div>
-          ) : null}
 
           <div className="rounded-lg bg-secondary p-4">
             <p className="text-sm text-muted-foreground">Total yang harus dibayar</p>

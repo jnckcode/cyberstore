@@ -61,6 +61,7 @@ NEXTAUTH_SECRET="ganti-dengan-random-string-panjang"
 BREVO_API_KEY="isi-api-key"
 BREVO_SENDER_EMAIL="noreply@domainkamu.com"
 TASKER_SECRET="ganti-tasker-secret"
+TASKER_PROFILE_TOKEN="ganti-token-callback-tasker"
 TRUST_PROXY="true"
 BASE_QRIS_STRING="000201010211...ISI_BASE_QRIS_STATIS_MERCHANT..."
 ```
@@ -181,3 +182,5 @@ sudo tail -f /var/log/apache2/cyberstore-access.log
 ## 13. Referensi fitur aplikasi
 
 Lihat `docs/application.md` untuk endpoint terbaru dan daftar fitur user/admin.
+
+Integrasi notifikasi DANA via Tasker: lihat `docs/tasker-dana-integration.md`.

@@ -72,6 +72,7 @@ model Transaction {
   base_price  Int
   unique_code Int
   total_price Int
+  active_nominal Int?           @unique
   status      TransactionStatus @default(PENDING)
   expires_at  DateTime
   created_at  DateTime          @default(now())

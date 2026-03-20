@@ -53,6 +53,7 @@ NEXTAUTH_SECRET="ganti-dengan-random-string-panjang"
 BREVO_API_KEY="isi-api-key"
 BREVO_SENDER_EMAIL="noreply@domainkamu.com"
 TASKER_SECRET="ganti-dengan-secret-webhook"
+TASKER_PROFILE_TOKEN="ganti-token-callback-tasker"
 TRUST_PROXY="true"
 BASE_QRIS_STRING="000201010211...ISI_BASE_QRIS_STATIS_MERCHANT..."
 ```
@@ -181,3 +182,5 @@ Ganti kredensial di atas sesuai kebijakan keamanan kamu.
 ## 15) Referensi fitur aplikasi
 
 Lihat `docs/application.md` untuk dokumentasi fitur terbaru (User Dashboard v2, Admin Dashboard full, endpoint API, dan security hardening).
+
+Integrasi notifikasi DANA via Tasker: lihat `docs/tasker-dana-integration.md`.

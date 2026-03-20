@@ -8,7 +8,7 @@ Dokumen ini menjelaskan status fitur terbaru CyberStore setelah implementasi fas
 - UI: TailwindCSS + komponen gaya Shadcn
 - Auth: NextAuth Credentials
 - ORM/DB: Prisma + MariaDB/MySQL
-- Payment callback: Webhook DANA (signature + anti-replay)
+- Payment callback: Webhook DANA + Tasker notification callback (signature + anti-replay)
 
 ## 2) Role dan Akses
 
@@ -102,6 +102,14 @@ Dokumen ini menjelaskan status fitur terbaru CyberStore setelah implementasi fas
 - Timestamp tolerance 2 menit
 - Persistent replay guard (`WebhookReplayGuard`)
 - Event logging (`WebhookEventLog`) untuk monitoring/admin
+- Notifikasi DANA dari Tasker bisa diverifikasi lewat callback dedicated
+- Idempotent callback period: jika pembayaran sudah terproses di window yang sama, callback duplikat akan dianggap already-processed
+
+### Anti Bentrok Paralel
+
+- `Transaction.active_nominal` dipakai sebagai unique lock nominal aktif untuk status `PENDING`.
+- Checkout akan retry alokasi nominal saat bentrok paralel, sehingga dua transaksi pada periode sama tidak bisa dapat nominal identik.
+- Saat transaksi menjadi `PAID/EXPIRED`, lock nominal dibebaskan (`active_nominal = null`).
 
 ### Konfigurasi QRIS
 
@@ -128,6 +136,7 @@ Dokumen ini menjelaskan status fitur terbaru CyberStore setelah implementasi fas
 - `POST /api/checkout`
 - `GET /api/transactions/[id]/status`
 - `POST /api/webhook/dana`
+- `POST /api/webhook/tasker/dana`
 
 ### Admin API (ADMIN only)
 
@@ -170,3 +179,5 @@ npx prisma migrate deploy
 - Jika butuh admin awal, buat user admin manual lalu set:
   - `role = ADMIN`
   - `is_verified = true`
+
+- Setup Tasker callback DANA: lihat `docs/tasker-dana-integration.md`

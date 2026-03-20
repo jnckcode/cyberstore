@@ -49,6 +49,7 @@ NEXTAUTH_SECRET="ganti-random-string-panjang"
 BREVO_API_KEY="isi-api-key"
 BREVO_SENDER_EMAIL="noreply@domainkamu.com"
 TASKER_SECRET="ganti-tasker-secret"
+TASKER_PROFILE_TOKEN="ganti-token-callback-tasker"
 TRUST_PROXY="true"
 BASE_QRIS_STRING="000201010211...ISI_BASE_QRIS_STATIS_MERCHANT..."
 ```
@@ -206,3 +207,5 @@ node -e "const {PrismaClient}=require('@prisma/client'); const {hashSync}=requir
 ## 15) Referensi fitur aplikasi
 
 Lihat `docs/application.md` untuk detail fitur terbaru aplikasi.
+
+Integrasi notifikasi DANA via Tasker: lihat `docs/tasker-dana-integration.md`.
