@@ -62,7 +62,10 @@ BREVO_API_KEY="isi-api-key"
 BREVO_SENDER_EMAIL="noreply@domainkamu.com"
 TASKER_SECRET="ganti-tasker-secret"
 TRUST_PROXY="true"
+BASE_QRIS_STRING="000201010211...ISI_BASE_QRIS_STATIS_MERCHANT..."
 ```
+
+Catatan: `BASE_QRIS_STRING` adalah base payload QRIS merchant. Sistem akan inject nominal unik (`total_price`) ke payload QRIS setiap transaksi, jadi QR final tiap user berbeda.
 
 ## 5. Install app + migrate + build
 

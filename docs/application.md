@@ -25,8 +25,9 @@ Dokumen ini menjelaskan status fitur terbaru CyberStore setelah implementasi fas
 ### Checkout + Status Pembayaran
 
 - Buat transaksi: `POST /api/checkout`
-- Halaman QRIS statis: `/checkout/[transactionId]`
+- Halaman QRIS dinamis per transaksi: `/checkout/[transactionId]`
 - Polling status: `GET /api/transactions/[id]/status`
+- Source QRIS: `BASE_QRIS_STRING` dari environment, lalu nominal `total_price` di-inject otomatis ke payload
 
 ### Dashboard User (v2)
 
@@ -101,6 +102,12 @@ Dokumen ini menjelaskan status fitur terbaru CyberStore setelah implementasi fas
 - Timestamp tolerance 2 menit
 - Persistent replay guard (`WebhookReplayGuard`)
 - Event logging (`WebhookEventLog`) untuk monitoring/admin
+
+### Konfigurasi QRIS
+
+- Isi `BASE_QRIS_STRING` di environment server dengan string QRIS merchant (base payload).
+- Saat checkout, sistem membentuk payload QRIS baru per transaksi dengan inject nominal `total_price` unik.
+- CRC payload dihitung ulang otomatis, jadi QR final tiap user/transaksi akan berbeda.
 
 ### Platform Security
 

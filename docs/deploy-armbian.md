@@ -50,7 +50,10 @@ BREVO_API_KEY="isi-api-key"
 BREVO_SENDER_EMAIL="noreply@domainkamu.com"
 TASKER_SECRET="ganti-tasker-secret"
 TRUST_PROXY="true"
+BASE_QRIS_STRING="000201010211...ISI_BASE_QRIS_STATIS_MERCHANT..."
 ```
+
+`BASE_QRIS_STRING` dipakai sebagai base QRIS merchant, lalu nominal unik transaksi di-inject otomatis saat checkout.
 
 Sangat disarankan pakai user DB khusus production, bukan root.
 
