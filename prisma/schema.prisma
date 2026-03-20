@@ -33,6 +33,7 @@ model User {
 
   ownedStock    StockItem[]
   transactions  Transaction[]
+  adminAudits   AdminAuditLog[]
 }
 
 model Product {
@@ -112,4 +113,37 @@ model WebhookReplayGuard {
   created_at  DateTime @default(now())
 
   @@index([created_at])
+}
+
+model WebhookEventLog {
+  id             Int      @id @default(autoincrement())
+  nominal        Int
+  timestamp      BigInt
+  signature      String   @db.VarChar(128)
+  request_ip     String   @db.VarChar(128)
+  validation_ok  Boolean
+  process_status String   @db.VarChar(64)
+  error_message  String?  @db.VarChar(255)
+  transaction_id Int?
+  created_at     DateTime @default(now())
+
+  @@index([created_at])
+  @@index([validation_ok])
+  @@index([process_status])
+}
+
+model AdminAuditLog {
+  id           Int      @id @default(autoincrement())
+  admin_user_id Int
+  action       String   @db.VarChar(128)
+  target_type  String   @db.VarChar(64)
+  target_id    Int?
+  details      String?  @db.Text
+  created_at   DateTime @default(now())
+
+  admin        User     @relation(fields: [admin_user_id], references: [id])
+
+  @@index([admin_user_id, created_at])
+  @@index([action])
+  @@index([target_type, target_id])
 }

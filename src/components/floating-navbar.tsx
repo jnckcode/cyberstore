@@ -22,6 +22,11 @@ export function FloatingNavbar() {
           </Link>
           {session?.user ? (
             <>
+              {session.user.role === "ADMIN" ? (
+                <Link href="/admin/dashboard" className="px-2 text-sm text-muted-foreground hover:text-foreground">
+                  Admin
+                </Link>
+              ) : null}
               <Link href="/dashboard" className="px-2 text-sm text-muted-foreground hover:text-foreground">
                 Dashboard
               </Link>

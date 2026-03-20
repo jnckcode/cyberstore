@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
+import { getClientIp } from "@/lib/security";
 
 const webhookSchema = z.object({
   nominal: z.number().int().positive(),
@@ -26,23 +27,61 @@ function secureEqual(a: string, b: string) {
 }
 
 export async function POST(request: Request) {
+  const requestIp = getClientIp(request);
   const secret = process.env.TASKER_SECRET;
   if (!secret) {
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
   }
 
-  const payload = webhookSchema.safeParse(await request.json());
+  const rawPayload = await request.json();
+  const payload = webhookSchema.safeParse(rawPayload);
   if (!payload.success) {
+    await prisma.webhookEventLog.create({
+      data: {
+        nominal: Number(rawPayload?.nominal ?? 0),
+        timestamp: BigInt(Number(rawPayload?.timestamp ?? 0)),
+        signature: String(rawPayload?.signature ?? "invalid"),
+        request_ip: requestIp,
+        validation_ok: false,
+        process_status: "INVALID_PAYLOAD",
+        error_message: "Invalid payload format"
+      }
+    });
+
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
   const { nominal, timestamp, signature } = payload.data;
   if (Math.abs(Date.now() - timestamp) > 2 * 60 * 1000) {
+    await prisma.webhookEventLog.create({
+      data: {
+        nominal,
+        timestamp: BigInt(timestamp),
+        signature,
+        request_ip: requestIp,
+        validation_ok: false,
+        process_status: "EXPIRED_TIMESTAMP",
+        error_message: "Timestamp difference exceeds 2 minutes"
+      }
+    });
+
     return NextResponse.json({ error: "Request expired" }, { status: 400 });
   }
 
   const expectedSignature = sha256(String(nominal) + String(timestamp) + secret);
   if (!secureEqual(signature, expectedSignature)) {
+    await prisma.webhookEventLog.create({
+      data: {
+        nominal,
+        timestamp: BigInt(timestamp),
+        signature,
+        request_ip: requestIp,
+        validation_ok: false,
+        process_status: "INVALID_SIGNATURE",
+        error_message: "Signature mismatch"
+      }
+    });
+
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
@@ -55,6 +94,18 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      await prisma.webhookEventLog.create({
+        data: {
+          nominal,
+          timestamp: BigInt(timestamp),
+          signature,
+          request_ip: requestIp,
+          validation_ok: true,
+          process_status: "REPLAY_REJECTED",
+          error_message: "Duplicate replay key"
+        }
+      });
+
       return NextResponse.json({ error: "Replay request rejected" }, { status: 409 });
     }
 
@@ -138,6 +189,18 @@ export async function POST(request: Request) {
       return paidTransaction;
     });
 
+    await prisma.webhookEventLog.create({
+      data: {
+        nominal,
+        timestamp: BigInt(timestamp),
+        signature,
+        request_ip: requestIp,
+        validation_ok: true,
+        process_status: "PAID_ASSIGNED",
+        transaction_id: result.id
+      }
+    });
+
     return NextResponse.json(
       {
         ok: true,
@@ -150,12 +213,48 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
     if (message === "PENDING_NOT_FOUND") {
+      await prisma.webhookEventLog.create({
+        data: {
+          nominal,
+          timestamp: BigInt(timestamp),
+          signature,
+          request_ip: requestIp,
+          validation_ok: true,
+          process_status: "PENDING_NOT_FOUND",
+          error_message: message
+        }
+      });
+
       return NextResponse.json({ error: "Pending transaction not found" }, { status: 404 });
     }
 
     if (message === "STOCK_NOT_AVAILABLE") {
+      await prisma.webhookEventLog.create({
+        data: {
+          nominal,
+          timestamp: BigInt(timestamp),
+          signature,
+          request_ip: requestIp,
+          validation_ok: true,
+          process_status: "STOCK_NOT_AVAILABLE",
+          error_message: message
+        }
+      });
+
       return NextResponse.json({ error: "Stock not available" }, { status: 409 });
     }
+
+    await prisma.webhookEventLog.create({
+      data: {
+        nominal,
+        timestamp: BigInt(timestamp),
+        signature,
+        request_ip: requestIp,
+        validation_ok: true,
+        process_status: "UNEXPECTED_FAILURE",
+        error_message: message
+      }
+    });
 
     return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
