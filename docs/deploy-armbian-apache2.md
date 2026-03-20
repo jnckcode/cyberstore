@@ -43,6 +43,7 @@ NEXTAUTH_SECRET="ganti-dengan-random-string-panjang"
 BREVO_API_KEY="isi-api-key"
 BREVO_SENDER_EMAIL="noreply@domainkamu.com"
 TASKER_SECRET="ganti-tasker-secret"
+TRUST_PROXY="true"
 ```
 
 ## 5. Install dependency + migrate + build

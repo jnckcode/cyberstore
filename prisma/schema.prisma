@@ -95,3 +95,21 @@ model EmailOtp {
 
   @@index([expires_at])
 }
+
+model OtpRequestLog {
+  id         Int      @id @default(autoincrement())
+  email      String
+  ip_address String
+  created_at DateTime @default(now())
+
+  @@index([email, created_at])
+  @@index([ip_address, created_at])
+}
+
+model WebhookReplayGuard {
+  id          Int      @id @default(autoincrement())
+  replay_key  String   @unique
+  created_at  DateTime @default(now())
+
+  @@index([created_at])
+}

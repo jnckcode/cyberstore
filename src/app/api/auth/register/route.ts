@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
+import { consumeMemoryRateLimit, getClientIp } from "@/lib/security";
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -10,6 +11,20 @@ const registerSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  const limit = consumeMemoryRateLimit(`register:${ip}`, 15, 10 * 60 * 1000);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(limit.retryAfterSec)
+        }
+      }
+    );
+  }
+
   const parsed = registerSchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });

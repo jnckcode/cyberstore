@@ -4,6 +4,7 @@ import { compare } from "bcryptjs";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
+import { consumeMemoryRateLimit } from "@/lib/security";
 
 declare module "next-auth" {
   interface User {
@@ -53,8 +54,14 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        const normalizedEmail = parsed.data.email.trim().toLowerCase();
+        const loginLimit = consumeMemoryRateLimit(`login:${normalizedEmail}`, 10, 10 * 60 * 1000);
+        if (!loginLimit.allowed) {
+          return null;
+        }
+
         const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email }
+          where: { email: normalizedEmail }
         });
 
         if (!user) {
@@ -63,6 +70,10 @@ export const authOptions: NextAuthOptions = {
 
         const isValidPassword = await compare(parsed.data.password, user.password_hash);
         if (!isValidPassword) {
+          return null;
+        }
+
+        if (!user.is_verified) {
           return null;
         }
 

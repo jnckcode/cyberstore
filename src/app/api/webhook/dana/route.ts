@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "crypto";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -45,7 +46,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
+  const replayKey = sha256(`${nominal}:${timestamp}:${signature}`);
   try {
+    await prisma.webhookReplayGuard.create({
+      data: {
+        replay_key: replayKey
+      }
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json({ error: "Replay request rejected" }, { status: 409 });
+    }
+
+    throw error;
+  }
+
+  try {
+    await prisma.webhookReplayGuard.deleteMany({
+      where: {
+        created_at: {
+          lt: new Date(Date.now() - 24 * 60 * 60 * 1000)
+        }
+      }
+    });
+
     const result = await prisma.$transaction(async (tx) => {
       const transaction = await tx.transaction.findFirst({
         where: {

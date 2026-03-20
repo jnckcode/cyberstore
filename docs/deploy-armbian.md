@@ -49,6 +49,7 @@ NEXTAUTH_SECRET="ganti-random-string-panjang"
 BREVO_API_KEY="isi-api-key"
 BREVO_SENDER_EMAIL="noreply@domainkamu.com"
 TASKER_SECRET="ganti-tasker-secret"
+TRUST_PROXY="true"
 ```
 
 Sangat disarankan pakai user DB khusus production, bukan root.
