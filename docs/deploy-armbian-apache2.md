@@ -13,6 +13,16 @@ chmod +x deploy/universal-deploy.sh
 
 Script akan menanyakan domain, port Apache, kredensial MySQL, nilai `.env`, setup service systemd, dan konfigurasi Apache2 otomatis.
 
+Catatan mode source:
+- Jika dijalankan dari folder hasil clone, pilih `current` agar tidak diminta URL repo dan install path lagi.
+- Jika ingin deploy ke path baru dari repo lain, pilih `clone`.
+
+Catatan mode network:
+- Pilih `cloudflared` jika domain dikelola Cloudflare Tunnel (tanpa SSL/domain termination langsung di server).
+- Mode `cloudflared` menyediakan:
+  - `origin app` -> tunnel pointing langsung ke `http://localhost:<APP_PORT>` (Apache dilewati)
+  - `origin apache` -> tunnel pointing ke `http://localhost:<APACHE_HTTP_PORT>` (pakai vhost Apache lokal)
+
 ## 0. Checklist sebelum mulai
 
 - Domain sudah pointing ke IP server

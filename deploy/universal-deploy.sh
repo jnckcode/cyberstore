@@ -2,19 +2,23 @@
 
 set -euo pipefail
 
-if [[ "${EUID}" -eq 0 ]]; then
-  echo "Please run this script as a regular sudo-capable user, not root."
-  exit 1
-fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
   echo "This deploy script is intended for Linux (Debian/Ubuntu/Armbian)."
   exit 1
 fi
 
-if ! command -v sudo >/dev/null 2>&1; then
-  echo "sudo is required."
-  exit 1
+if [[ "${EUID}" -eq 0 ]]; then
+  SUDO=""
+  echo "Running as root: sudo will be skipped."
+else
+  if ! command -v sudo >/dev/null 2>&1; then
+    echo "sudo is required for non-root execution."
+    exit 1
+  fi
+  SUDO="sudo"
 fi
 
 prompt_default() {
@@ -95,17 +99,72 @@ auto_secret() {
 echo "=== CyberStore Universal Production Deploy (Debian/Ubuntu/Armbian) ==="
 echo
 
-REPO_URL="$(prompt_required "Git repository URL (HTTPS)")"
-BRANCH="$(prompt_default "Git branch" "main")"
-APP_DIR="$(prompt_default "Install directory" "/opt/cyberstore")"
+DEPLOY_NETWORK_MODE="$(prompt_default "Network mode: direct/cloudflared" "direct")"
+DEPLOY_NETWORK_MODE="$(echo "${DEPLOY_NETWORK_MODE}" | tr '[:upper:]' '[:lower:]')"
+if [[ "${DEPLOY_NETWORK_MODE}" != "direct" && "${DEPLOY_NETWORK_MODE}" != "cloudflared" ]]; then
+  echo "Invalid network mode. Use direct or cloudflared."
+  exit 1
+fi
+
+SOURCE_MODE="clone"
+if [[ -d "${REPO_ROOT}/.git" ]]; then
+  SOURCE_MODE_DEFAULT="current"
+  SOURCE_MODE="$(prompt_default "Source mode: current/clone" "${SOURCE_MODE_DEFAULT}")"
+else
+  SOURCE_MODE="$(prompt_default "Source mode: current/clone" "clone")"
+fi
+
+SOURCE_MODE="$(echo "${SOURCE_MODE}" | tr '[:upper:]' '[:lower:]')"
+
+if [[ "${SOURCE_MODE}" == "current" ]]; then
+  APP_DIR="${REPO_ROOT}"
+  BRANCH="$(prompt_default "Git branch to update" "main")"
+  REPO_URL=""
+  echo "Using current cloned repository at: ${APP_DIR}"
+else
+  REPO_URL="$(prompt_required "Git repository URL (HTTPS)")"
+  BRANCH="$(prompt_default "Git branch" "main")"
+  APP_DIR="$(prompt_default "Install directory" "/opt/cyberstore")"
+fi
+
 SERVICE_NAME="$(prompt_default "Systemd service name" "cyberstore")"
 SERVICE_USER="$(prompt_default "System service user" "cyberstore")"
 
 DOMAIN="$(prompt_required "Public domain (example: cyberstore.example.com)")"
-APACHE_HTTP_PORT="$(prompt_default "Apache HTTP port" "80")"
-APACHE_HTTPS_PORT="$(prompt_default "Apache HTTPS port" "443")"
 APP_PORT="$(prompt_default "Next.js internal app port" "3000")"
-DISABLE_DEFAULT_SITE="$(prompt_yes_no "Disable Apache default site (000-default.conf)?" "yes")"
+
+USE_APACHE="yes"
+APACHE_HTTP_PORT="80"
+APACHE_HTTPS_PORT="443"
+DISABLE_DEFAULT_SITE="yes"
+INSTALL_CERTBOT_DEFAULT="yes"
+CLOUDFLARED_ORIGIN=""
+TUNNEL_ORIGIN_URL=""
+
+if [[ "${DEPLOY_NETWORK_MODE}" == "cloudflared" ]]; then
+  CLOUDFLARED_ORIGIN="$(prompt_default "Cloudflared origin mode: app/apache" "app")"
+  CLOUDFLARED_ORIGIN="$(echo "${CLOUDFLARED_ORIGIN}" | tr '[:upper:]' '[:lower:]')"
+  if [[ "${CLOUDFLARED_ORIGIN}" != "app" && "${CLOUDFLARED_ORIGIN}" != "apache" ]]; then
+    echo "Invalid cloudflared origin mode. Use app or apache."
+    exit 1
+  fi
+
+  if [[ "${CLOUDFLARED_ORIGIN}" == "app" ]]; then
+    USE_APACHE="no"
+    TUNNEL_ORIGIN_URL="$(prompt_default "Cloudflared origin URL" "http://localhost:${APP_PORT}")"
+  else
+    USE_APACHE="yes"
+    APACHE_HTTP_PORT="$(prompt_default "Apache local HTTP port for tunnel" "8080")"
+    DISABLE_DEFAULT_SITE="$(prompt_yes_no "Disable Apache default site (000-default.conf)?" "yes")"
+    TUNNEL_ORIGIN_URL="$(prompt_default "Cloudflared origin URL" "http://localhost:${APACHE_HTTP_PORT}")"
+  fi
+
+  INSTALL_CERTBOT_DEFAULT="no"
+else
+  APACHE_HTTP_PORT="$(prompt_default "Apache HTTP port" "80")"
+  APACHE_HTTPS_PORT="$(prompt_default "Apache HTTPS port" "443")"
+  DISABLE_DEFAULT_SITE="$(prompt_yes_no "Disable Apache default site (000-default.conf)?" "yes")"
+fi
 
 DB_HOST="$(prompt_default "MySQL host" "127.0.0.1")"
 DB_PORT="$(prompt_default "MySQL port" "3306")"
@@ -144,18 +203,34 @@ fi
 TRUST_PROXY="$(prompt_default "TRUST_PROXY (true/false)" "true")"
 BASE_QRIS_STRING="$(prompt_required "BASE_QRIS_STRING (merchant base QRIS payload)")"
 
-INSTALL_CERTBOT="$(prompt_yes_no "Install and run certbot for SSL now?" "yes")"
+INSTALL_CERTBOT="$(prompt_yes_no "Install and run certbot for SSL now?" "${INSTALL_CERTBOT_DEFAULT}")"
 RUN_SEED="$(prompt_yes_no "Run prisma seed after migration?" "no")"
 
 echo
 echo "=== Summary ==="
-echo "Repo: ${REPO_URL} (${BRANCH})"
+echo "Network mode: ${DEPLOY_NETWORK_MODE}"
+if [[ -n "${REPO_URL}" ]]; then
+  echo "Repo: ${REPO_URL} (${BRANCH})"
+else
+  echo "Repo: current clone (${APP_DIR}) branch ${BRANCH}"
+fi
 echo "Path: ${APP_DIR}"
 echo "Domain: ${DOMAIN}"
-echo "Apache ports: ${APACHE_HTTP_PORT}/${APACHE_HTTPS_PORT}"
+if [[ "${USE_APACHE}" == "yes" ]]; then
+  if [[ "${DEPLOY_NETWORK_MODE}" == "cloudflared" ]]; then
+    echo "Apache local port: ${APACHE_HTTP_PORT}"
+  else
+    echo "Apache ports: ${APACHE_HTTP_PORT}/${APACHE_HTTPS_PORT}"
+  fi
+else
+  echo "Apache: skipped"
+fi
 echo "App port: ${APP_PORT}"
 echo "DB: ${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 echo "Service: ${SERVICE_NAME} (user ${SERVICE_USER})"
+if [[ -n "${TUNNEL_ORIGIN_URL}" ]]; then
+  echo "Cloudflared origin URL: ${TUNNEL_ORIGIN_URL}"
+fi
 echo "Run seed: ${RUN_SEED}"
 echo
 
@@ -167,8 +242,12 @@ fi
 
 echo
 echo "[1/11] Installing packages..."
-sudo apt update
-sudo apt install -y git curl apache2 build-essential ca-certificates openssl
+${SUDO} apt update
+BASE_PACKAGES=(git curl build-essential ca-certificates openssl)
+if [[ "${USE_APACHE}" == "yes" ]]; then
+  BASE_PACKAGES+=(apache2)
+fi
+${SUDO} apt install -y "${BASE_PACKAGES[@]}"
 
 echo
 echo "[2/11] Installing Node.js 20 LTS (if needed)..."
@@ -179,20 +258,25 @@ else
 fi
 
 if [[ "$NODE_MAJOR" -lt 20 ]]; then
-  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-  sudo apt install -y nodejs
+  curl -fsSL https://deb.nodesource.com/setup_20.x | ${SUDO} -E bash -
+  ${SUDO} apt install -y nodejs
 fi
 
 echo
 echo "[3/11] Preparing service user and app directory..."
 if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
-  sudo useradd -r -s /usr/sbin/nologin "$SERVICE_USER"
+  ${SUDO} useradd -r -s /usr/sbin/nologin "$SERVICE_USER"
 fi
 
-sudo mkdir -p "$APP_DIR"
-sudo chown -R "$USER":"$USER" "$APP_DIR"
+${SUDO} mkdir -p "$APP_DIR"
+${SUDO} chown -R "$USER":"$USER" "$APP_DIR"
 
-if [[ -d "$APP_DIR/.git" ]]; then
+if [[ "$SOURCE_MODE" == "current" ]]; then
+  echo "Using existing current clone. Pulling latest branch ${BRANCH}..."
+  git -C "$APP_DIR" fetch --all
+  git -C "$APP_DIR" checkout "$BRANCH"
+  git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
+elif [[ -d "$APP_DIR/.git" ]]; then
   echo "Existing git repository detected. Pulling latest branch ${BRANCH}..."
   git -C "$APP_DIR" fetch --all
   git -C "$APP_DIR" checkout "$BRANCH"
@@ -217,8 +301,8 @@ GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost'; \
 FLUSH PRIVILEGES;"
 
 if ! "${MYSQL_CMD_BASE[@]}" -e "$MYSQL_SQL"; then
-  echo "Direct mysql command failed, retrying with sudo mysql..."
-  sudo mysql -e "$MYSQL_SQL"
+  echo "Direct mysql command failed, retrying with elevated mysql..."
+  ${SUDO} mysql -e "$MYSQL_SQL"
 fi
 
 echo
@@ -253,12 +337,12 @@ npm --prefix "$APP_DIR" run build
 
 echo
 echo "[7/11] Setting ownership for runtime..."
-sudo chown -R "$SERVICE_USER":"$SERVICE_USER" "$APP_DIR"
+${SUDO} chown -R "$SERVICE_USER":"$SERVICE_USER" "$APP_DIR"
 
 echo
 echo "[8/11] Creating systemd service..."
 SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
-sudo tee "$SERVICE_PATH" >/dev/null <<EOF
+${SUDO} tee "$SERVICE_PATH" >/dev/null <<EOF
 [Unit]
 Description=CyberStore Next.js Service
 After=network.target mariadb.service mysql.service
@@ -284,16 +368,38 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 
-sudo systemctl daemon-reload
-sudo systemctl enable "$SERVICE_NAME"
-sudo systemctl restart "$SERVICE_NAME"
+${SUDO} systemctl daemon-reload
+${SUDO} systemctl enable "$SERVICE_NAME"
+${SUDO} systemctl restart "$SERVICE_NAME"
 
 echo
 echo "[9/11] Configuring Apache2 reverse proxy..."
-sudo a2enmod proxy proxy_http headers rewrite ssl
+if [[ "${USE_APACHE}" == "yes" ]]; then
+  if [[ "${DEPLOY_NETWORK_MODE}" == "cloudflared" ]]; then
+    ${SUDO} a2enmod proxy proxy_http headers rewrite
 
-APACHE_SITE_PATH="/etc/apache2/sites-available/${SERVICE_NAME}.conf"
-sudo tee "$APACHE_SITE_PATH" >/dev/null <<EOF
+    APACHE_SITE_PATH="/etc/apache2/sites-available/${SERVICE_NAME}.conf"
+    ${SUDO} tee "$APACHE_SITE_PATH" >/dev/null <<EOF
+<VirtualHost *:${APACHE_HTTP_PORT}>
+    ServerName ${DOMAIN}
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    RequestHeader set X-Forwarded-Proto "https"
+
+    ProxyPass / http://127.0.0.1:${APP_PORT}/
+    ProxyPassReverse / http://127.0.0.1:${APP_PORT}/
+
+    ErrorLog \\${APACHE_LOG_DIR}/${SERVICE_NAME}-error.log
+    CustomLog \\${APACHE_LOG_DIR}/${SERVICE_NAME}-access.log combined
+</VirtualHost>
+EOF
+  else
+    ${SUDO} a2enmod proxy proxy_http headers rewrite ssl
+
+    APACHE_SITE_PATH="/etc/apache2/sites-available/${SERVICE_NAME}.conf"
+    ${SUDO} tee "$APACHE_SITE_PATH" >/dev/null <<EOF
 <VirtualHost *:${APACHE_HTTP_PORT}>
     ServerName ${DOMAIN}
 
@@ -331,30 +437,41 @@ sudo tee "$APACHE_SITE_PATH" >/dev/null <<EOF
     </VirtualHost>
 </IfModule>
 EOF
+  fi
 
-if [[ "$DISABLE_DEFAULT_SITE" == "yes" ]]; then
-  sudo a2dissite 000-default.conf || true
+  if [[ "$DISABLE_DEFAULT_SITE" == "yes" ]]; then
+    ${SUDO} a2dissite 000-default.conf || true
+  fi
+  ${SUDO} a2ensite "${SERVICE_NAME}.conf"
+  ${SUDO} apache2ctl configtest
+  ${SUDO} systemctl restart apache2
+else
+  echo "Apache step skipped (cloudflared app mode)."
 fi
-sudo a2ensite "${SERVICE_NAME}.conf"
-sudo apache2ctl configtest
-sudo systemctl restart apache2
 
 echo
 echo "[10/11] Optional SSL setup with certbot..."
-if [[ "$INSTALL_CERTBOT" == "yes" ]]; then
-  sudo apt install -y certbot python3-certbot-apache
-  sudo certbot --apache -d "$DOMAIN" || true
+if [[ "$INSTALL_CERTBOT" == "yes" && "${USE_APACHE}" == "yes" && "${DEPLOY_NETWORK_MODE}" == "direct" ]]; then
+  ${SUDO} apt install -y certbot python3-certbot-apache
+  ${SUDO} certbot --apache -d "$DOMAIN" || true
 fi
 
 echo
 echo "[11/11] Final status..."
-sudo systemctl status "$SERVICE_NAME" --no-pager || true
-sudo systemctl status apache2 --no-pager || true
+${SUDO} systemctl status "$SERVICE_NAME" --no-pager || true
+if [[ "${USE_APACHE}" == "yes" ]]; then
+  ${SUDO} systemctl status apache2 --no-pager || true
+fi
 
 echo
 echo "=== Deployment Finished ==="
 echo "Service: ${SERVICE_NAME}"
-echo "App URL: https://${DOMAIN}"
+if [[ "${DEPLOY_NETWORK_MODE}" == "cloudflared" ]]; then
+  echo "App public URL (via Cloudflared): https://${DOMAIN}"
+  echo "Configure Cloudflared dashboard public hostname -> ${TUNNEL_ORIGIN_URL}"
+else
+  echo "App URL: https://${DOMAIN}"
+fi
 echo "App path: ${APP_DIR}"
 echo
 echo "Important secrets you may want to store securely:"
