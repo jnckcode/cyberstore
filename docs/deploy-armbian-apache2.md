@@ -2,6 +2,17 @@
 
 Panduan ini adalah jalur cepat deploy production CyberStore di Armbian, reverse proxy Apache2, dan auto-run lewat systemd.
 
+## Opsi tercepat (script interaktif)
+
+Gunakan script interaktif universal:
+
+```bash
+chmod +x deploy/universal-deploy.sh
+./deploy/universal-deploy.sh
+```
+
+Script akan menanyakan domain, port Apache, kredensial MySQL, nilai `.env`, setup service systemd, dan konfigurasi Apache2 otomatis.
+
 ## 0. Checklist sebelum mulai
 
 - Domain sudah pointing ke IP server
