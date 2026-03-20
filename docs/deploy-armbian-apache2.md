@@ -1,15 +1,22 @@
-# CyberStore Production Deploy (Armbian + Apache2)
+# CyberStore Production Deploy (Armbian + Apache2 + Auto Service)
 
-Panduan ini untuk deploy CyberStore di Armbian dengan Apache2 sebagai reverse proxy dan systemd untuk auto-run server Next.js.
+Panduan ini adalah jalur cepat deploy production CyberStore di Armbian, reverse proxy Apache2, dan auto-run lewat systemd.
 
-## 1. Persiapan server
+## 0. Checklist sebelum mulai
+
+- Domain sudah pointing ke IP server
+- Akses SSH + sudo
+- MariaDB/MySQL tersedia
+- Port 80/443 terbuka
+
+## 1. Install dependency server
 
 ```bash
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y git curl apache2 build-essential
 ```
 
-## 2. Install Node.js 20 LTS (ARM64)
+Install Node.js 20 LTS:
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
@@ -18,7 +25,7 @@ node -v
 npm -v
 ```
 
-## 3. Clone aplikasi
+## 2. Clone project
 
 ```bash
 sudo mkdir -p /opt/cyberstore
@@ -27,17 +34,28 @@ cd /opt/cyberstore
 git clone <REPO_URL> .
 ```
 
-## 4. Konfigurasi environment production
+## 3. Siapkan database production
+
+Masuk MariaDB/MySQL lalu buat database + user khusus app:
+
+```sql
+CREATE DATABASE IF NOT EXISTS cyberstore CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'cyberstore_user'@'localhost' IDENTIFIED BY 'ganti_password_kuat';
+GRANT ALL PRIVILEGES ON cyberstore.* TO 'cyberstore_user'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+## 4. Buat `.env` production
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Contoh `.env`:
+Contoh minimal:
 
 ```env
-DATABASE_URL="mysql://root@127.0.0.1:3306/cyberstore"
+DATABASE_URL="mysql://cyberstore_user:ganti_password_kuat@127.0.0.1:3306/cyberstore"
 NEXTAUTH_URL="https://cyberstore.domainkamu.com"
 NEXTAUTH_SECRET="ganti-dengan-random-string-panjang"
 BREVO_API_KEY="isi-api-key"
@@ -46,7 +64,7 @@ TASKER_SECRET="ganti-tasker-secret"
 TRUST_PROXY="true"
 ```
 
-## 5. Install dependency + migrate + build
+## 5. Install app + migrate + build
 
 ```bash
 npm ci
@@ -55,24 +73,17 @@ npx prisma migrate deploy
 npm run build
 ```
 
-Opsional seed data awal:
+Opsional isi data awal:
 
 ```bash
 npm run prisma:seed
 ```
 
-## 6. Buat user service
+## 6. Buat user service + pasang systemd
 
 ```bash
 sudo useradd -r -s /usr/sbin/nologin cyberstore || true
 sudo chown -R cyberstore:cyberstore /opt/cyberstore
-```
-
-## 7. Systemd service auto-run
-
-Pakai file yang sudah ada di repo: `deploy/cyberstore.service`
-
-```bash
 sudo cp /opt/cyberstore/deploy/cyberstore.service /etc/systemd/system/cyberstore.service
 sudo systemctl daemon-reload
 sudo systemctl enable cyberstore
@@ -80,28 +91,28 @@ sudo systemctl start cyberstore
 sudo systemctl status cyberstore
 ```
 
-Pastikan aplikasi listen di `127.0.0.1:3000`.
-
-## 8. Aktifkan modul Apache2 yang dibutuhkan
+Validasi app listen di local port 3000:
 
 ```bash
-sudo a2enmod proxy
-sudo a2enmod proxy_http
-sudo a2enmod headers
-sudo a2enmod rewrite
-sudo systemctl restart apache2
+ss -tulpn | grep 3000
 ```
 
-## 9. Konfigurasi VirtualHost Apache2
+## 7. Konfigurasi Apache2 reverse proxy
 
-Pakai template repo: `deploy/apache2-cyberstore.conf`
+Aktifkan modul:
+
+```bash
+sudo a2enmod proxy proxy_http headers rewrite ssl
+```
+
+Pasang VirtualHost dari template:
 
 ```bash
 sudo cp /opt/cyberstore/deploy/apache2-cyberstore.conf /etc/apache2/sites-available/cyberstore.conf
 sudo nano /etc/apache2/sites-available/cyberstore.conf
 ```
 
-Ganti `ServerName` sesuai domain kamu.
+Ubah `ServerName` jadi domain kamu.
 
 Aktifkan site:
 
@@ -109,19 +120,41 @@ Aktifkan site:
 sudo a2dissite 000-default.conf
 sudo a2ensite cyberstore.conf
 sudo apache2ctl configtest
-sudo systemctl reload apache2
+sudo systemctl restart apache2
 ```
 
-## 10. SSL Let's Encrypt (direkomendasikan)
+## 8. SSL Let's Encrypt
 
 ```bash
 sudo apt install -y certbot python3-certbot-apache
 sudo certbot --apache -d cyberstore.domainkamu.com
 ```
 
-Setelah cert aktif, cek bahwa redirect HTTP -> HTTPS sudah berjalan.
+## 9. Bootstrap admin pertama
 
-## 11. Update release
+```bash
+node -e "const {PrismaClient}=require('@prisma/client'); const {hashSync}=require('bcryptjs'); const prisma=new PrismaClient(); (async()=>{ const email='admin@cyberstore.local'; const password='Admin#12345'; const password_hash=hashSync(password,10); await prisma.user.upsert({ where:{email}, update:{ password_hash, role:'ADMIN', is_verified:true }, create:{ email, password_hash, role:'ADMIN', is_verified:true } }); await prisma.$disconnect(); })().catch(async(e)=>{ console.error(e); await prisma.$disconnect(); process.exit(1); });"
+```
+
+Setelah login pertama, segera ganti password admin.
+
+## 10. Test auto-run setelah reboot
+
+```bash
+sudo reboot
+```
+
+Setelah server online lagi:
+
+```bash
+sudo systemctl is-enabled cyberstore
+sudo systemctl status cyberstore
+sudo systemctl status apache2
+```
+
+Kalau `enabled` dan `active (running)`, production auto-run sukses.
+
+## 11. Update release (rolling manual)
 
 ```bash
 cd /opt/cyberstore
@@ -134,43 +167,14 @@ sudo systemctl restart cyberstore
 sudo systemctl reload apache2
 ```
 
-## 12. Monitoring dan troubleshooting
-
-Log app:
+## 12. Monitoring cepat
 
 ```bash
 sudo journalctl -u cyberstore -f
-```
-
-Log Apache:
-
-```bash
 sudo tail -f /var/log/apache2/cyberstore-error.log
 sudo tail -f /var/log/apache2/cyberstore-access.log
 ```
 
-## 13. Uji auto-run setelah reboot
+## 13. Referensi fitur aplikasi
 
-```bash
-sudo reboot
-```
-
-Setelah online:
-
-```bash
-sudo systemctl status cyberstore
-sudo systemctl is-enabled cyberstore
-sudo systemctl status apache2
-```
-
-Jika `active (running)` dan `enabled`, deploy production siap pakai.
-
-## 14. Bootstrap admin pertama
-
-```bash
-node -e "const {PrismaClient}=require('@prisma/client'); const {hashSync}=require('bcryptjs'); const prisma=new PrismaClient(); (async()=>{ const email='admin@cyberstore.local'; const password='Admin#12345'; const password_hash=hashSync(password,10); await prisma.user.upsert({ where:{email}, update:{ password_hash, role:'ADMIN', is_verified:true }, create:{ email, password_hash, role:'ADMIN', is_verified:true } }); await prisma.$disconnect(); })().catch(async(e)=>{ console.error(e); await prisma.$disconnect(); process.exit(1); });"
-```
-
-## 15. Referensi fitur aplikasi
-
-Lihat `docs/application.md` untuk rincian endpoint dan fitur terbaru.
+Lihat `docs/application.md` untuk endpoint terbaru dan daftar fitur user/admin.
