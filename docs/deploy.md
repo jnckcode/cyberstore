@@ -164,3 +164,17 @@ sudo systemctl status nginx
 ```bash
 npx prisma migrate status
 ```
+
+## 14) Bootstrap admin pertama
+
+Secara default tidak ada username/password admin bawaan. Setelah deploy, buat admin pertama:
+
+```bash
+node -e "const {PrismaClient}=require('@prisma/client'); const {hashSync}=require('bcryptjs'); const prisma=new PrismaClient(); (async()=>{ const email='admin@cyberstore.local'; const password='Admin#12345'; const password_hash=hashSync(password,10); await prisma.user.upsert({ where:{email}, update:{ password_hash, role:'ADMIN', is_verified:true }, create:{ email, password_hash, role:'ADMIN', is_verified:true } }); await prisma.$disconnect(); })().catch(async(e)=>{ console.error(e); await prisma.$disconnect(); process.exit(1); });"
+```
+
+Ganti kredensial di atas sesuai kebijakan keamanan kamu.
+
+## 15) Referensi fitur aplikasi
+
+Lihat `docs/application.md` untuk dokumentasi fitur terbaru (User Dashboard v2, Admin Dashboard full, endpoint API, dan security hardening).

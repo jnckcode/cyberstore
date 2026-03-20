@@ -164,3 +164,13 @@ sudo systemctl status apache2
 ```
 
 Jika `active (running)` dan `enabled`, deploy production siap pakai.
+
+## 14. Bootstrap admin pertama
+
+```bash
+node -e "const {PrismaClient}=require('@prisma/client'); const {hashSync}=require('bcryptjs'); const prisma=new PrismaClient(); (async()=>{ const email='admin@cyberstore.local'; const password='Admin#12345'; const password_hash=hashSync(password,10); await prisma.user.upsert({ where:{email}, update:{ password_hash, role:'ADMIN', is_verified:true }, create:{ email, password_hash, role:'ADMIN', is_verified:true } }); await prisma.$disconnect(); })().catch(async(e)=>{ console.error(e); await prisma.$disconnect(); process.exit(1); });"
+```
+
+## 15. Referensi fitur aplikasi
+
+Lihat `docs/application.md` untuk rincian endpoint dan fitur terbaru.
