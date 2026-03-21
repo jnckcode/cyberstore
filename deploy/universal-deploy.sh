@@ -428,8 +428,8 @@ if [[ "${USE_APACHE}" == "yes" ]]; then
     ProxyPass / http://127.0.0.1:${APP_PORT}/
     ProxyPassReverse / http://127.0.0.1:${APP_PORT}/
 
-    ErrorLog \\${APACHE_LOG_DIR}/${SERVICE_NAME}-error.log
-    CustomLog \\${APACHE_LOG_DIR}/${SERVICE_NAME}-access.log combined
+    ErrorLog \${APACHE_LOG_DIR}/${SERVICE_NAME}-error.log
+    CustomLog \${APACHE_LOG_DIR}/${SERVICE_NAME}-access.log combined
 </VirtualHost>
 EOF
   else
@@ -448,8 +448,8 @@ EOF
     ProxyPass / http://127.0.0.1:${APP_PORT}/
     ProxyPassReverse / http://127.0.0.1:${APP_PORT}/
 
-    ErrorLog \\${APACHE_LOG_DIR}/${SERVICE_NAME}-error.log
-    CustomLog \\${APACHE_LOG_DIR}/${SERVICE_NAME}-access.log combined
+    ErrorLog \${APACHE_LOG_DIR}/${SERVICE_NAME}-error.log
+    CustomLog \${APACHE_LOG_DIR}/${SERVICE_NAME}-access.log combined
 </VirtualHost>
 
 <IfModule mod_ssl.c>
@@ -464,8 +464,8 @@ EOF
         ProxyPass / http://127.0.0.1:${APP_PORT}/
         ProxyPassReverse / http://127.0.0.1:${APP_PORT}/
 
-        ErrorLog \\${APACHE_LOG_DIR}/${SERVICE_NAME}-error.log
-        CustomLog \\${APACHE_LOG_DIR}/${SERVICE_NAME}-access.log combined
+        ErrorLog \${APACHE_LOG_DIR}/${SERVICE_NAME}-error.log
+        CustomLog \${APACHE_LOG_DIR}/${SERVICE_NAME}-access.log combined
 
         SSLEngine on
         SSLCertificateFile /etc/letsencrypt/live/${DOMAIN}/fullchain.pem
