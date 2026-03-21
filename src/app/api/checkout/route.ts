@@ -21,6 +21,25 @@ function pickUniqueCode(usedNominals: Set<number>, basePrice: number) {
   return candidate ?? null;
 }
 
+async function expirePendingTransactions(useActiveNominal: boolean) {
+  await prisma.transaction.updateMany({
+    where: {
+      status: "PENDING",
+      expires_at: {
+        lte: new Date()
+      }
+    },
+    data: useActiveNominal
+      ? {
+          status: "EXPIRED",
+          active_nominal: null
+        }
+      : {
+          status: "EXPIRED"
+        }
+  });
+}
+
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -58,18 +77,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Stock is empty" }, { status: 409 });
   }
 
-  await prisma.transaction.updateMany({
-    where: {
-      status: "PENDING",
-      expires_at: {
-        lte: new Date()
-      }
-    },
-    data: {
-      status: "EXPIRED",
-      active_nominal: null
+  let useActiveNominal = true;
+  try {
+    await expirePendingTransactions(true);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2022") {
+      useActiveNominal = false;
+      await expirePendingTransactions(false);
+    } else {
+      throw error;
     }
-  });
+  }
 
   let transaction:
     | {
@@ -109,16 +127,26 @@ export async function POST(request: Request) {
 
     try {
       const created = await prisma.transaction.create({
-        data: {
-          user_id: Number(session.user.id),
-          product_id: product.id,
-          base_price: product.base_price,
-          unique_code: uniqueCode,
-          total_price: totalPrice,
-          active_nominal: totalPrice,
-          status: "PENDING",
-          expires_at: expiresAt
-        },
+        data: useActiveNominal
+          ? {
+              user_id: Number(session.user.id),
+              product_id: product.id,
+              base_price: product.base_price,
+              unique_code: uniqueCode,
+              total_price: totalPrice,
+              active_nominal: totalPrice,
+              status: "PENDING",
+              expires_at: expiresAt
+            }
+          : {
+              user_id: Number(session.user.id),
+              product_id: product.id,
+              base_price: product.base_price,
+              unique_code: uniqueCode,
+              total_price: totalPrice,
+              status: "PENDING",
+              expires_at: expiresAt
+            },
         select: {
           id: true,
           status: true,
@@ -130,6 +158,11 @@ export async function POST(request: Request) {
       transaction = created;
       break;
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2022") {
+        useActiveNominal = false;
+        continue;
+      }
+
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         continue;
       }

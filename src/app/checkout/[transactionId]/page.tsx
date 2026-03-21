@@ -37,10 +37,15 @@ export default async function CheckoutQrisPage({
   }
 
   const baseQrisString = process.env.BASE_QRIS_STRING?.trim() ?? "";
-  const dynamicQrisString = baseQrisString
-    ? buildDynamicQrisString(baseQrisString, transaction.total_price)
-    : null;
-  const qrisDataUrl = dynamicQrisString ? await buildQrisDataUrl(dynamicQrisString) : null;
+  let qrisDataUrl: string | null = null;
+  try {
+    const dynamicQrisString = baseQrisString
+      ? buildDynamicQrisString(baseQrisString, transaction.total_price)
+      : null;
+    qrisDataUrl = dynamicQrisString ? await buildQrisDataUrl(dynamicQrisString) : null;
+  } catch {
+    qrisDataUrl = null;
+  }
 
   return (
     <div className="mx-auto max-w-xl">

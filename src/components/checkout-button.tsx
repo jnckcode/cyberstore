@@ -19,7 +19,8 @@ export function CheckoutButton({ productId, isLoggedIn }: { productId: number; i
       });
 
       if (!response.ok) {
-        throw new Error("Checkout gagal");
+        const errorBody = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(errorBody?.error ?? "Checkout gagal");
       }
 
       const data = (await response.json()) as { id: number };
