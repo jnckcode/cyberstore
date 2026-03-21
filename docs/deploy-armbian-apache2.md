@@ -100,7 +100,7 @@ Catatan: `BASE_QRIS_STRING` adalah base payload QRIS merchant. Sistem akan injec
 ```bash
 npm ci
 npx prisma generate
-npx prisma migrate deploy
+npx prisma migrate deploy --schema prisma/schema.prisma
 npm run build
 ```
 
@@ -192,11 +192,20 @@ cd /opt/cyberstore
 git pull origin main
 npm ci
 npx prisma generate
-npx prisma migrate deploy
+npx prisma migrate deploy --schema prisma/schema.prisma
 npm run build
 sudo systemctl restart cyberstore
 sudo systemctl reload apache2
 ```
+
+Jika kena error P3009/P3018:
+
+```bash
+chmod +x deploy/prisma-recover.sh
+./deploy/prisma-recover.sh 20260320150100_parallel_collision_guard
+```
+
+Untuk kasus migration gagal sebagian, script akan repair state untuk migration tersebut lalu resolve + deploy ulang.
 
 ## 12. Monitoring cepat
 

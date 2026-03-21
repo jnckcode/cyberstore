@@ -365,10 +365,10 @@ chmod 600 "${APP_DIR}/.env"
 echo
 echo "[6/11] Installing dependencies and building app..."
 npm --prefix "$APP_DIR" ci
-npm --prefix "$APP_DIR" run prisma:generate
-(cd "$APP_DIR" && npx prisma migrate deploy --schema "$APP_DIR/prisma/schema.prisma")
+npx --prefix "$APP_DIR" prisma generate --schema "$APP_DIR/prisma/schema.prisma"
+npx --prefix "$APP_DIR" prisma migrate deploy --schema "$APP_DIR/prisma/schema.prisma"
 if [[ "$RUN_SEED" == "yes" ]]; then
-  npm --prefix "$APP_DIR" run prisma:seed
+  npx --prefix "$APP_DIR" prisma db seed --schema "$APP_DIR/prisma/schema.prisma"
 fi
 npm --prefix "$APP_DIR" run build
 

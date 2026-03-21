@@ -63,7 +63,7 @@ Sangat disarankan pakai user DB khusus production, bukan root.
 ```bash
 npm ci
 npx prisma generate
-npx prisma migrate deploy
+npx prisma migrate deploy --schema prisma/schema.prisma
 npm run build
 ```
 
@@ -177,11 +177,20 @@ cd /opt/cyberstore
 git pull origin main
 npm ci
 npx prisma generate
-npx prisma migrate deploy
+npx prisma migrate deploy --schema prisma/schema.prisma
 npm run build
 sudo systemctl restart cyberstore
 sudo systemctl status cyberstore
 ```
+
+Jika kena error P3009/P3018:
+
+```bash
+chmod +x deploy/prisma-recover.sh
+./deploy/prisma-recover.sh 20260320150100_parallel_collision_guard
+```
+
+Catatan: script ini bisa dijalankan dari direktori mana pun di dalam repo, karena path schema dihitung otomatis.
 
 ## 13) Validasi auto-run setelah reboot
 

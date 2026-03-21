@@ -65,12 +65,13 @@ BASE_QRIS_STRING="000201010211...ISI_BASE_QRIS_STATIS_MERCHANT..."
 ```bash
 npm ci
 npx prisma generate
+npx prisma migrate status --schema prisma/schema.prisma
 ```
 
 ## 6) Migrate database + seed (opsional)
 
 ```bash
-npx prisma migrate deploy
+npx prisma migrate deploy --schema prisma/schema.prisma
 npm run prisma:seed
 ```
 
@@ -143,7 +144,7 @@ Gunakan panduan systemd lengkap di `docs/deploy-armbian.md` (konfigurasi service
 cd /var/www/cyberstore
 git pull origin main
 npm ci
-npx prisma migrate deploy
+npx prisma migrate deploy --schema prisma/schema.prisma
 npm run build
 sudo systemctl restart cyberstore
 sudo systemctl status cyberstore
@@ -166,8 +167,17 @@ sudo systemctl status nginx
 - Cek koneksi DB dari Prisma:
 
 ```bash
-npx prisma migrate status
+npx prisma migrate status --schema prisma/schema.prisma
 ```
+
+- Recovery cepat P3009/P3018:
+
+```bash
+chmod +x deploy/prisma-recover.sh
+./deploy/prisma-recover.sh 20260320150100_parallel_collision_guard
+```
+
+Jika command dijalankan dari folder `deploy/`, tetap gunakan script di atas (script otomatis pakai schema path absolut).
 
 ## 14) Bootstrap admin pertama
 
