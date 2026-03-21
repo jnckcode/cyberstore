@@ -35,6 +35,15 @@ Header yang wajib dikirim (mode paling mudah):
 x-tasker-token: <TASKER_PROFILE_TOKEN>
 ```
 
+Alternatif paling kompatibel untuk Tasker XML sederhana:
+
+```text
+POST https://<domain-kamu>/api/webhook/tasker/dana?token=<TASKER_PROFILE_TOKEN>
+Body form-urlencoded: message=<teks_notif>&timestamp=<epoch_ms>
+```
+
+Backend menerima token dari header `x-tasker-token` **atau** query/body `token`.
+
 Opsional (mode signature manual):
 
 - Tambahkan field `signature` di body.
@@ -57,6 +66,8 @@ signature = SHA256(String(nominal) + String(timestamp) + TASKER_SECRET)
 7. HTTP Request (POST, JSON) ke:
    - `https://<domain-kamu>/api/webhook/tasker/dana`
 8. Pastikan response `200` untuk pembayaran valid.
+
+Untuk profile siap import, gunakan file `Dana_PG.prj.xml` terbaru dari repo.
 
 ## 4) Endpoint terkait
 

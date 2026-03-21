@@ -6,9 +6,13 @@ import { logInvalidWebhookPayload, verifyAndAssignPayment } from "@/lib/payment-
 import { getClientIp } from "@/lib/security";
 
 const taskerPayloadSchema = z.object({
-  message: z.string().min(1),
-  timestamp: z.number().int(),
-  signature: z.string().min(1).optional()
+  message: z.string().min(1).optional(),
+  text: z.string().min(1).optional(),
+  body: z.string().min(1).optional(),
+  notification: z.string().min(1).optional(),
+  timestamp: z.number().int().optional(),
+  signature: z.string().min(1).optional(),
+  token: z.string().min(1).optional()
 });
 
 function parseDanaMessageNominal(message: string) {
@@ -28,7 +32,21 @@ function parseDanaMessageNominal(message: string) {
 
 export async function POST(request: Request) {
   const requestIp = getClientIp(request);
-  const rawPayload = await request.json();
+  const contentType = request.headers.get("content-type") ?? "";
+  let rawPayload: Record<string, unknown> = {};
+
+  if (contentType.includes("application/json")) {
+    rawPayload = (await request.json()) as Record<string, unknown>;
+  } else if (contentType.includes("application/x-www-form-urlencoded")) {
+    const formData = await request.formData();
+    for (const [key, value] of formData.entries()) {
+      rawPayload[key] = String(value);
+    }
+  } else {
+    const text = await request.text();
+    rawPayload = { message: text };
+  }
+
   const parsed = taskerPayloadSchema.safeParse(rawPayload);
 
   if (!parsed.success) {
@@ -44,12 +62,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const nominal = parseDanaMessageNominal(parsed.data.message);
+  const message =
+    parsed.data.message ?? parsed.data.text ?? parsed.data.body ?? parsed.data.notification ?? "";
+  const timestamp = parsed.data.timestamp ?? Date.now();
+
+  const nominal = parseDanaMessageNominal(message);
   if (!nominal) {
     await logInvalidWebhookPayload({
       source: "TASKER_DANA",
       nominal: 0,
-      timestamp: parsed.data.timestamp,
+      timestamp,
       signature: String(parsed.data.signature ?? "missing"),
       requestIp,
       errorMessage: "Cannot parse nominal from notification message"
@@ -59,15 +81,17 @@ export async function POST(request: Request) {
   }
 
   const taskerTokenHeader = request.headers.get("x-tasker-token");
+  const taskerTokenQuery = new URL(request.url).searchParams.get("token");
   const taskerToken = process.env.TASKER_PROFILE_TOKEN?.trim();
-  const tokenAuthorized = Boolean(taskerToken && taskerTokenHeader && taskerTokenHeader === taskerToken);
+  const tokenCandidate = taskerTokenHeader ?? parsed.data.token ?? taskerTokenQuery ?? "";
+  const tokenAuthorized = Boolean(taskerToken && tokenCandidate && tokenCandidate === taskerToken);
 
   const signature = parsed.data.signature;
   if (!signature && !tokenAuthorized) {
     await logInvalidWebhookPayload({
       source: "TASKER_DANA",
       nominal,
-      timestamp: parsed.data.timestamp,
+      timestamp,
       signature: "missing",
       requestIp,
       errorMessage: "Missing signature and invalid tasker token"
@@ -80,7 +104,7 @@ export async function POST(request: Request) {
     signature ??
     (process.env.TASKER_SECRET
       ? createHash("sha256")
-          .update(String(nominal) + String(parsed.data.timestamp) + process.env.TASKER_SECRET)
+          .update(String(nominal) + String(timestamp) + process.env.TASKER_SECRET)
           .digest("hex")
       : "");
 
@@ -90,7 +114,7 @@ export async function POST(request: Request) {
 
   const result = await verifyAndAssignPayment({
     nominal,
-    timestamp: parsed.data.timestamp,
+    timestamp,
     signature: finalSignature,
     requestIp,
     source: "TASKER_DANA"
