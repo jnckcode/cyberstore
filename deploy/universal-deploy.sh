@@ -142,7 +142,16 @@ CLOUDFLARED_ORIGIN=""
 TUNNEL_ORIGIN_URL=""
 
 if [[ "${DEPLOY_NETWORK_MODE}" == "cloudflared" ]]; then
-  CLOUDFLARED_ORIGIN="$(prompt_default "Cloudflared origin mode: app/apache" "app")"
+  echo
+  echo "Cloudflared mode detected:"
+  echo "- SSL/domain termination handled by Cloudflare Tunnel"
+  echo "- Server will expose local origin only (app or apache local port)"
+  echo "- Apache default site will NOT be disabled automatically"
+  echo
+fi
+
+if [[ "${DEPLOY_NETWORK_MODE}" == "cloudflared" ]]; then
+  CLOUDFLARED_ORIGIN="$(prompt_default "Cloudflared target mode: app/apache" "app")"
   CLOUDFLARED_ORIGIN="$(echo "${CLOUDFLARED_ORIGIN}" | tr '[:upper:]' '[:lower:]')"
   if [[ "${CLOUDFLARED_ORIGIN}" != "app" && "${CLOUDFLARED_ORIGIN}" != "apache" ]]; then
     echo "Invalid cloudflared origin mode. Use app or apache."
@@ -155,7 +164,7 @@ if [[ "${DEPLOY_NETWORK_MODE}" == "cloudflared" ]]; then
   else
     USE_APACHE="yes"
     APACHE_HTTP_PORT="$(prompt_default "Apache local HTTP port for tunnel" "8080")"
-    DISABLE_DEFAULT_SITE="$(prompt_yes_no "Disable Apache default site (000-default.conf)?" "yes")"
+    DISABLE_DEFAULT_SITE="no"
     TUNNEL_ORIGIN_URL="$(prompt_default "Cloudflared origin URL" "http://localhost:${APACHE_HTTP_PORT}")"
   fi
 
@@ -171,10 +180,28 @@ DB_PORT="$(prompt_default "MySQL port" "3306")"
 DB_NAME="$(prompt_default "MySQL database name" "cyberstore")"
 DB_USER="$(prompt_default "MySQL app username" "cyberstore_user")"
 DB_PASS="$(prompt_secret_default "MySQL app password" "cyberstore_password_change_me")"
-DB_ROOT_USER="$(prompt_default "MySQL admin user for provisioning" "root")"
-DB_ROOT_PASS="$(prompt_secret_optional "MySQL admin password (optional)")"
 
-NEXTAUTH_URL="$(prompt_default "NEXTAUTH_URL" "https://${DOMAIN}")"
+DB_MODE="$(prompt_default "Database mode: existing/provision" "existing")"
+DB_MODE="$(echo "${DB_MODE}" | tr '[:upper:]' '[:lower:]')"
+if [[ "${DB_MODE}" != "existing" && "${DB_MODE}" != "provision" ]]; then
+  echo "Invalid database mode. Use existing or provision."
+  exit 1
+fi
+
+DB_ROOT_USER=""
+DB_ROOT_PASS=""
+if [[ "${DB_MODE}" == "provision" ]]; then
+  DB_ROOT_USER="$(prompt_default "MySQL admin user for provisioning" "root")"
+  DB_ROOT_PASS="$(prompt_secret_optional "MySQL admin password (optional)")"
+fi
+
+if [[ "${DEPLOY_NETWORK_MODE}" == "cloudflared" ]]; then
+  NEXTAUTH_URL_DEFAULT="https://${DOMAIN}"
+  echo "For cloudflared mode, NEXTAUTH_URL should be public tunnel URL, not localhost."
+else
+  NEXTAUTH_URL_DEFAULT="https://${DOMAIN}"
+fi
+NEXTAUTH_URL="$(prompt_default "NEXTAUTH_URL" "${NEXTAUTH_URL_DEFAULT}")"
 
 USE_AUTO_NEXTAUTH_SECRET="$(prompt_yes_no "Auto-generate NEXTAUTH_SECRET?" "yes")"
 if [[ "$USE_AUTO_NEXTAUTH_SECRET" == "yes" ]]; then
@@ -203,8 +230,13 @@ fi
 TRUST_PROXY="$(prompt_default "TRUST_PROXY (true/false)" "true")"
 BASE_QRIS_STRING="$(prompt_required "BASE_QRIS_STRING (merchant base QRIS payload)")"
 
-INSTALL_CERTBOT="$(prompt_yes_no "Install and run certbot for SSL now?" "${INSTALL_CERTBOT_DEFAULT}")"
-RUN_SEED="$(prompt_yes_no "Run prisma seed after migration?" "no")"
+if [[ "${DEPLOY_NETWORK_MODE}" == "cloudflared" ]]; then
+  INSTALL_CERTBOT="no"
+  echo "Certbot skipped automatically in cloudflared mode."
+else
+  INSTALL_CERTBOT="$(prompt_yes_no "Install and run certbot for SSL now?" "${INSTALL_CERTBOT_DEFAULT}")"
+fi
+RUN_SEED="$(prompt_yes_no "Run prisma seed after migration (sample demo products/stocks)?" "no")"
 
 echo
 echo "=== Summary ==="
@@ -227,6 +259,7 @@ else
 fi
 echo "App port: ${APP_PORT}"
 echo "DB: ${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+echo "DB mode: ${DB_MODE}"
 echo "Service: ${SERVICE_NAME} (user ${SERVICE_USER})"
 if [[ -n "${TUNNEL_ORIGIN_URL}" ]]; then
   echo "Cloudflared origin URL: ${TUNNEL_ORIGIN_URL}"
@@ -289,20 +322,24 @@ fi
 
 echo
 echo "[4/11] Provisioning MySQL database and user..."
-MYSQL_CMD_BASE=(mysql -u "$DB_ROOT_USER")
-if [[ -n "$DB_ROOT_PASS" ]]; then
-  MYSQL_CMD_BASE+=("-p${DB_ROOT_PASS}")
-fi
+if [[ "${DB_MODE}" == "provision" ]]; then
+  MYSQL_CMD_BASE=(mysql -u "$DB_ROOT_USER")
+  if [[ -n "$DB_ROOT_PASS" ]]; then
+    MYSQL_CMD_BASE+=("-p${DB_ROOT_PASS}")
+  fi
 
-MYSQL_SQL="CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; \
+  MYSQL_SQL="CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; \
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}'; \
 ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}'; \
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost'; \
 FLUSH PRIVILEGES;"
 
-if ! "${MYSQL_CMD_BASE[@]}" -e "$MYSQL_SQL"; then
-  echo "Direct mysql command failed, retrying with elevated mysql..."
-  ${SUDO} mysql -e "$MYSQL_SQL"
+  if ! "${MYSQL_CMD_BASE[@]}" -e "$MYSQL_SQL"; then
+    echo "Direct mysql command failed, retrying with elevated mysql..."
+    ${SUDO} mysql -e "$MYSQL_SQL"
+  fi
+else
+  echo "Skipping provisioning. Using existing database and app credentials."
 fi
 
 echo

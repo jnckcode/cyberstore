@@ -22,6 +22,12 @@ Catatan mode network:
 - Mode `cloudflared` menyediakan:
   - `origin app` -> tunnel pointing langsung ke `http://localhost:<APP_PORT>` (Apache dilewati)
   - `origin apache` -> tunnel pointing ke `http://localhost:<APACHE_HTTP_PORT>` (pakai vhost Apache lokal)
+- Pada mode `cloudflared`, script tidak akan men-disable `000-default.conf` otomatis (aman untuk skenario multi-subdomain/vhost).
+- Pada mode `cloudflared`, certbot otomatis di-skip.
+
+Catatan mode database:
+- Pilih `existing` jika user/password/database MySQL sudah kamu siapkan sendiri (script tidak buat user/profile baru).
+- Pilih `provision` jika kamu ingin script membuat database + app user otomatis.
 
 ## 0. Checklist sebelum mulai
 
