@@ -6,13 +6,19 @@ import { logInvalidWebhookPayload, verifyAndAssignPayment } from "@/lib/payment-
 import { getClientIp } from "@/lib/security";
 
 const taskerPayloadSchema = z.object({
-  message: z.string().min(1).optional(),
-  text: z.string().min(1).optional(),
-  body: z.string().min(1).optional(),
-  notification: z.string().min(1).optional(),
-  timestamp: z.number().int().optional(),
-  signature: z.string().min(1).optional(),
-  token: z.string().min(1).optional()
+  message: z.string().optional(),
+  text: z.string().optional(),
+  body: z.string().optional(),
+  notification: z.string().optional(),
+  timestamp: z.coerce.number().int().optional(),
+  ts: z.coerce.number().int().optional(),
+  time: z.coerce.number().int().optional(),
+  signature: z.string().optional(),
+  token: z.string().optional(),
+  title: z.string().optional(),
+  app: z.string().optional(),
+  nltitle: z.string().optional(),
+  nltext: z.string().optional()
 });
 
 function parseDanaMessageNominal(message: string) {
@@ -61,23 +67,50 @@ export async function POST(request: Request) {
   }
 
   const parsed = taskerPayloadSchema.safeParse(rawPayload);
+  const data = parsed.success ? parsed.data : {};
 
-  if (!parsed.success) {
+  const message = [
+    data.message,
+    data.text,
+    data.body,
+    data.notification,
+    data.nltext,
+    typeof rawPayload.message === "string" ? rawPayload.message : undefined,
+    typeof rawPayload.text === "string" ? rawPayload.text : undefined,
+    typeof rawPayload.body === "string" ? rawPayload.body : undefined,
+    typeof rawPayload.notification === "string" ? rawPayload.notification : undefined,
+    typeof rawPayload.nltext === "string" ? rawPayload.nltext : undefined,
+    typeof rawPayload.evtprm3 === "string" ? rawPayload.evtprm3 : undefined
+  ]
+    .map((candidate) => (candidate ?? "").trim())
+    .find((candidate) => candidate.length > 0) ?? "";
+
+  const timestampCandidate =
+    data.timestamp ??
+    data.ts ??
+    data.time ??
+    Number(rawPayload.timestamp ?? rawPayload.ts ?? rawPayload.time ?? Date.now());
+
+  const timestamp = Number.isFinite(timestampCandidate) ? Math.trunc(timestampCandidate) : Date.now();
+
+  if (!message) {
     await logInvalidWebhookPayload({
       source: "TASKER_DANA",
       nominal: 0,
-      timestamp: Number(rawPayload?.timestamp ?? 0),
+      timestamp,
       signature: String(rawPayload?.signature ?? "invalid"),
       requestIp,
-      errorMessage: "Invalid payload format"
+      errorMessage: "Notification message is empty"
     });
 
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: "Invalid payload",
+        hint: "Missing message/text/body/notification field"
+      },
+      { status: 400 }
+    );
   }
-
-  const message =
-    parsed.data.message ?? parsed.data.text ?? parsed.data.body ?? parsed.data.notification ?? "";
-  const timestamp = parsed.data.timestamp ?? Date.now();
 
   const nominal = parseDanaMessageNominal(message);
   if (!nominal) {
@@ -85,7 +118,7 @@ export async function POST(request: Request) {
       source: "TASKER_DANA",
       nominal: 0,
       timestamp,
-      signature: String(parsed.data.signature ?? "missing"),
+      signature: String(data.signature ?? rawPayload.signature ?? "missing"),
       requestIp,
       errorMessage: "Cannot parse nominal from notification message"
     });
@@ -96,10 +129,12 @@ export async function POST(request: Request) {
   const taskerTokenHeader = request.headers.get("x-tasker-token");
   const taskerTokenQuery = new URL(request.url).searchParams.get("token");
   const taskerToken = process.env.TASKER_PROFILE_TOKEN?.trim();
-  const tokenCandidate = taskerTokenHeader ?? parsed.data.token ?? taskerTokenQuery ?? "";
+  const tokenCandidate =
+    taskerTokenHeader ?? data.token ?? (typeof rawPayload.token === "string" ? rawPayload.token : undefined) ?? taskerTokenQuery ?? "";
   const tokenAuthorized = Boolean(taskerToken && tokenCandidate && tokenCandidate === taskerToken);
 
-  const signature = parsed.data.signature;
+  const signature =
+    data.signature ?? (typeof rawPayload.signature === "string" ? rawPayload.signature : undefined);
   if (!signature && !tokenAuthorized) {
     await logInvalidWebhookPayload({
       source: "TASKER_DANA",
