@@ -30,6 +30,19 @@ function parseDanaMessageNominal(message: string) {
   return Math.round(amount);
 }
 
+export async function GET() {
+  return NextResponse.json(
+    {
+      ok: true,
+      endpoint: "/api/webhook/tasker/dana",
+      method: "POST",
+      expected_content_type: ["application/json", "application/x-www-form-urlencoded", "text/plain"],
+      expected_fields: ["message", "timestamp", "signature(optional)", "token(optional)"]
+    },
+    { status: 200 }
+  );
+}
+
 export async function POST(request: Request) {
   const requestIp = getClientIp(request);
   const contentType = request.headers.get("content-type") ?? "";
